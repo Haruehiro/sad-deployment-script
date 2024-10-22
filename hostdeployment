@@ -28,11 +28,26 @@ sudo ufw allow http
 sudo ufw allow https
 sudo ufw allow 2375
 sudo ufw allow 2376
+sudo ufw allow 9443
 
 # Docker Configuration
 echo "Configuring Docker settings..."
 sudo systemctl enable docker
 sudo docker network create --driver bridge app-network
+
+# Install Portainer
+echo "Installing Portainer..."
+sudo docker volume create portainer_data
+sudo docker run -d -p 9443:9443 \
+    --name portainer \
+    --restart=always \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v portainer_data:/data \
+    portainer/portainer-ce:latest
+
+# Install Certbot
+echo "Installing Certbot..."
+sudo apt install -y certbot python3-certbot-nginx
 
 # Nginx Configuration
 echo "Configuring Nginx Web Server settings..."
@@ -64,6 +79,18 @@ logpath = /var/log/auth.log
 maxretry = 3
 EOF
 sudo service fail2ban restart
+
+# Two-Factor Authentication (Google Authenticator)
+echo "Installing Google Authenticator..."
+sudo apt install -y libpam-google-authenticator
+sudo tee /etc/pam.d/sshd <<EOF
+auth required pam_google_authenticator.so
+EOF
+sudo tee /etc/ssh/sshd_config <<EOF
+ChallengeResponseAuthentication yes
+AuthenticationMethods publickey,keyboard-interactive
+EOF
+sudo service ssh restart
 
 # User Management
 echo "Creating a new user and adding them to the Docker group..."
