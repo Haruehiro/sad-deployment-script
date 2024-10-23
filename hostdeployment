@@ -1,42 +1,63 @@
 #!/bin/bash
 
+# Redirect both stdout and stderr to /tmp/script.log
+exec 3>&1 1>/tmp/script.log 2>&1
+
+# Function to print echo messages to the console
+log() {
+  echo "$@" >&3
+}
+
+# Clear the screen
+clear >&3
+
 # Initial Setup
-echo "Updating package list and upgrading existing packages..."
-sudo apt update && sudo apt upgrade -y
+log
+log "Updating package list and upgrading existing packages..."
+log
+sudo apt update && sudo apt upgrade -y && sudo apt autoremove -yq && sudo apt autoclean -yq
 
 # Install Dependencies
-echo "Installing necessary packages..."
-sudo apt install -y \
-    docker.io \
-    docker-compose \
-    nano \
-    git \
-    curl \
-    wget \
-    unzip \
-    nginx \
-    ufw \
-    fail2ban
+log
+log "Installing necessary packages..."
+# List of packages to install
+packages=(
+  docker.io
+  docker-compose
+  nano
+  git
+  curl
+  wget
+  unzip
+  nginx
+  ufw
+  fail2ban
+)
+# Install all packages in one command
+sudo apt install -y "${packages[@]}"
 
 # Server Hardening
-echo "Configuring server hardening..."
-sudo ufw enable
+log
+log "Configuring server hardening..."
+sudo ufw --force enable
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
-sudo ufw allow ssh
-sudo ufw allow http
-sudo ufw allow https
-sudo ufw allow 2375
-sudo ufw allow 2376
-sudo ufw allow 9443
+# Array of ports to allow
+ports=(ssh http https 2375 2376 9443)
+# Loop through the ports and allow them
+for port in "${ports[@]}"; do
+  sudo ufw allow "$port"
+done
 
 # Docker Configuration
-echo "Configuring Docker settings..."
+log
+log "Configuring Docker settings..."
 sudo systemctl enable docker
 sudo docker network create --driver bridge app-network
 
 # Install Portainer
-echo "Installing Portainer..."
+log
+log "Installing Portainer..."
 sudo docker volume create portainer_data
 sudo docker run -d -p 9443:9443 \
     --name portainer \
@@ -46,11 +67,13 @@ sudo docker run -d -p 9443:9443 \
     portainer/portainer-ce:latest
 
 # Install Certbot
-echo "Installing Certbot..."
+log
+log "Installing Certbot..."
 sudo apt install -y certbot python3-certbot-nginx
 
 # Nginx Configuration
-echo "Configuring Nginx Web Server settings..."
+log
+log "Configuring Nginx Web Server settings..."
 sudo tee /etc/nginx/sites-available/default <<EOF
 server {
     listen 80;
@@ -69,7 +92,8 @@ EOF
 sudo service nginx restart
 
 # Fail2Ban Configuration
-echo "Configuring Fail2Ban settings..."
+log
+log "Configuring Fail2Ban settings..."
 sudo tee /etc/fail2ban/jail.local <<EOF
 [sshd]
 enabled = true
@@ -81,7 +105,8 @@ EOF
 sudo service fail2ban restart
 
 # Two-Factor Authentication (Google Authenticator)
-echo "Installing Google Authenticator..."
+log
+log "Installing Google Authenticator..."
 sudo apt install -y libpam-google-authenticator
 sudo tee /etc/pam.d/sshd <<EOF
 auth required pam_google_authenticator.so
@@ -93,12 +118,15 @@ EOF
 sudo service ssh restart
 
 # User Management
-echo "Creating a new user and adding them to the Docker group..."
+log
+log "Creating a new user and adding them to the Docker group..."
 sudo useradd -m -s /bin/bash -G docker your_username
-echo "Please switch to the new user: su - your_username"
+log
+log "Please switch to the new user: su - your_username"
 
 # Docker Compose Setup
-echo "Creating a default Docker Compose file..."
+log
+log "Creating a default Docker Compose file..."
 sudo tee docker-compose.yml <<EOF
 version: '3'
 
@@ -117,5 +145,8 @@ networks:
 EOF
 
 # Final Steps
-echo "Build and start the Docker container: docker-compose up -d"
-echo "Configure the web application and Nginx settings as needed."
+log
+log "Build and start the Docker container: sudo docker-compose up -d"
+log "Configure the web application and Nginx settings as needed."
+log "Logfile: cat /tmp/script.log"
+log
